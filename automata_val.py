@@ -1,4 +1,8 @@
 import numpy as np
+from collections import defaultdict
+import networkx as nx
+import matplotlib.pyplot as plt
+
 
 class tabAutomata:
     def __init__(self, selection):
@@ -15,6 +19,9 @@ class tabAutomata:
             3: "table_automata3.txt",
             4: "table_automata4.txt"
         }
+
+        self.graph_repr = nx.Graph()
+        self.labels = defaultdict()
 
         if selection == 1:
             self.final_state = 7
@@ -50,10 +57,47 @@ class tabAutomata:
                 array_data = np.append(array_data, [array_row], axis=0)
         
         self.error_state = len(data) - 1
-        
-
         return array_data
-            
+    
+    def creating_graph(self):
+        m,n = np.shape(self.transition_function)
+
+        for q_state in range(m):
+            for q_transition in range(n):
+                if q_state > 0 and q_transition > 0:
+                    # Adding nodes and edges to graph
+                    t_state = int(self.transition_function[q_state, q_transition])
+                    self.graph_repr.add_edge(q_state, t_state)
+
+                    alphabet = self.transition_function[0, q_transition]
+                    if (q_state, t_state) in self.labels.keys():
+                        self.labels[(q_state, t_state)] = self.labels[(q_state, t_state)] + alphabet
+                    else:
+                        self.labels[(q_state, t_state)] = alphabet
+
+        print(self.labels)
+
+        return None
+
+    def plotting_graph(self):
+        pos = nx.spring_layout(self.graph_repr)
+        fig, ax = plt.subplots(figsize=(1,1))
+
+        nx.draw(
+            self.graph_repr, pos, edge_color='black', width=1, linewidths=1,
+            node_size=500, node_color='pink', alpha=0.9,
+            labels={node: node for node in self.graph_repr.nodes()}
+            )
+        
+        nx.draw_networkx_edge_labels(
+            self.graph_repr, pos,
+            edge_labels= self.labels,
+            font_color='red'
+        )
+
+        plt.axis('off')
+        plt.show()
+        return None
 
     def loading_automata(self):
         self.transition_function = self.read_transition()
@@ -106,9 +150,6 @@ class tabAutomata:
 
 if __name__ == "__main__":
     print("Automata que analiza cadenas de notación exponencial: 1.1e+10")
-    obj1 = tabAutomata(1)
-    print("\n-------------------------------------------------------------------------------------------------")
-    print("--------------------------------------Ejemplo Correcto------------------------------------------")
-    print("-------------------------------------------------------------------------------------------------")
-    print("Cadena muestra: 3232.23234e+10")
-    obj1.print_properties()
+    obj1 = tabAutomata(3)
+    obj1.creating_graph()
+    obj1.plotting_graph()
