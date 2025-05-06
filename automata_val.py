@@ -2,6 +2,7 @@ import numpy as np
 from collections import defaultdict
 import networkx as nx
 import matplotlib.pyplot as plt
+import graphviz
 
 
 class tabAutomata:
@@ -17,11 +18,16 @@ class tabAutomata:
             1: "table_automata1.txt",
             2: "table_automata2.txt",
             3: "table_automata3.txt",
-            4: "table_automata4.txt"
+            4: "table_automata4.txt",
+            5: "table_automata5.txt"
         }
 
-        self.graph_repr = nx.Graph()
+        self.graph_repr = nx.DiGraph()
         self.labels = defaultdict()
+        self.qrip_transition = None
+        self.qrip_start = 0
+        self.qrip_final = 0
+        self.re_gex = ""
 
         if selection == 1:
             self.final_state = 7
@@ -31,12 +37,12 @@ class tabAutomata:
             self.final_state = 3
         elif selection == 4:
             self.final_state = 3
-
+        elif selection == 5:
+            self.final_state = 4
         self.loading_automata()
 
 
     def read_transition(self):
-
         path = self.path[self.selection]
 
         with open(path, "r") as file:
@@ -70,12 +76,13 @@ class tabAutomata:
                     self.graph_repr.add_edge(q_state, t_state)
 
                     alphabet = self.transition_function[0, q_transition]
+                    
                     if (q_state, t_state) in self.labels.keys():
                         self.labels[(q_state, t_state)] = self.labels[(q_state, t_state)] + alphabet
                     else:
                         self.labels[(q_state, t_state)] = alphabet
 
-        print(self.labels)
+        # print(self.labels)
 
         return None
 
@@ -98,7 +105,110 @@ class tabAutomata:
         plt.axis('off')
         plt.show()
         return None
+    
+    def visualize_graph(self, transition_matrix, viz = '0'):
+        m,n = np.shape(transition_matrix)
+        print("Transition matrix:\n", self.qrip_transition)
+        print(m,n)
+        graph = graphviz.Digraph(comment="DFA")
+        labels = {}
 
+        for i in range(m):
+            if i > 0:
+                q_state = int(transition_matrix[i,0])
+                for j in range(n):
+                    if j > 0:
+                        # Creating adjacency list with alphabet values
+                        t_state = int(transition_matrix[i,j])
+                        # self.graph_repr.add_edge(q_state, t_state)
+                        alphabet = transition_matrix[0, j]
+                        if t_state != 5:
+                            labels[(q_state, t_state)] = alphabet
+
+                # Adding nodes to graph vis
+                node = "q" + str(t_state)
+                if t_state != 5:
+                    graph.node(node, node)
+
+                # Marking the final state
+                if transition_matrix[i,j] == str(self.final_state):
+                    graph.node(node, node, shape='doublecircle')
+
+
+        print(labels)
+        # Adding edges to graph
+        for source,destiny in labels.keys():
+            graph.edge("q{}".format(source),"q{}".format(destiny), labels[(source,destiny)])
+        
+        # Rendering graph
+        graph.render("DFA" + viz, view=True)
+        return None
+
+    def qrip_method(self):
+        # Step 1: Adding new start and final states.
+        m,n = np.shape(self.transition_function)
+        new_start, new_final = np.array([m - 1 for i in range(n)]), np.array([m - 1 for i in range(n)])
+        
+        for i in range(n):
+            # print(self.transition_function[0,i])
+            if i == 0:
+                new_start[i] = m
+                new_final[i] = m + 1
+            if self.transition_function[0,i] == "!":
+                new_start[i] = self.initial_state
+
+        self.qrip_start = m
+        self.qrip_final = m + 1
+        self.qrip_transition = self.transition_function
+        self.qrip_transition = np.append(self.qrip_transition, [new_start], axis=0)
+        self.qrip_transition = np.append(self.qrip_transition, [new_final], axis=0)
+        # Adding new final state on new transtion matrix
+        self.qrip_transition[self.final_state,-1] = new_final[0]
+        self.final_state = new_final[0]
+        self.visualize_graph(self.qrip_transition)
+        
+        # Step 2: Ripping states
+        m,n = np.shape(self.qrip_transition)
+
+        # Listing all in and out states
+        while True:
+            in_states = []
+            out_states = []
+            m,n = np.shape(self.qrip_transition)
+            qrip = self.qrip_transition[1,0]
+
+            for i in range(m):
+                for j in range(n):
+                    if i > 0 and j > 0:
+                        
+                        if self.qrip_transition[i,j] == str(qrip):
+                            in_states.append(self.qrip_transition[i,0])
+                    
+                        if i == qrip:
+                            out_states.append(self.qrip_transition[i,j])
+            
+            # print("Qrip:", qrip)
+            # print("Entrada:", in_states)
+            # print("Salida:", out_states)
+
+            # Modifying qrip_transition
+            self.qrip_transition = np.delete(self.qrip_transition, (1), axis=0)
+            m -= 1
+
+            for i in range(m):
+                for j in range(n):
+                    if i > 0 and j > 0:
+                        if self.qrip_transition[i,j] == str(qrip):
+                            self.qrip_transition[i,j] = self.qrip_start
+
+
+            # print("Transition matrix:\n", self.qrip_transition)
+            self.visualize_graph(self.qrip_transition, viz=str(qrip))
+            input()
+            if m < 4:
+                break
+        return None
+    
     def loading_automata(self):
         self.transition_function = self.read_transition()
         # self.transition_function = np.array([
@@ -149,7 +259,8 @@ class tabAutomata:
         return None
 
 if __name__ == "__main__":
-    print("Automata que analiza cadenas de notación exponencial: 1.1e+10")
-    obj1 = tabAutomata(3)
+    obj1 = tabAutomata(5)
     obj1.creating_graph()
-    obj1.plotting_graph()
+    #obj1.visualize_graph()
+    #obj1.print_properties()
+    obj1.qrip_method()
