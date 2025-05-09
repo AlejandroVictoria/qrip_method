@@ -27,7 +27,7 @@ class tabAutomata:
         self.qrip_transition = None
         self.qrip_start = 0
         self.qrip_final = 0
-        self.re_gex = ""
+        self.regex_list = {}
 
         if selection == 1:
             self.final_state = 7
@@ -109,9 +109,10 @@ class tabAutomata:
     def visualize_graph(self, transition_matrix, viz = '0'):
         m,n = np.shape(transition_matrix)
         print("Transition matrix:\n", self.qrip_transition)
-        print(m,n)
+        # print(m,n)
         graph = graphviz.Digraph(comment="DFA")
         labels = {}
+        regex_list = self.regex_list.copy()
 
         for i in range(m):
             if i > 0:
@@ -122,6 +123,8 @@ class tabAutomata:
                         t_state = int(transition_matrix[i,j])
                         # self.graph_repr.add_edge(q_state, t_state)
                         alphabet = transition_matrix[0, j]
+
+                        
                         if t_state != 5:
                             labels[(q_state, t_state)] = alphabet
 
@@ -135,11 +138,19 @@ class tabAutomata:
                     graph.node(node, node, shape='doublecircle')
 
 
-        print(labels)
+        #print(labels)
         # Adding edges to graph
         for source,destiny in labels.keys():
-            graph.edge("q{}".format(source),"q{}".format(destiny), labels[(source,destiny)])
-        
+            # if self.regex_list != {}:
+                
+            if (str(source),str(destiny)) in regex_list.keys():
+                graph.edge("q{}".format(source),"q{}".format(destiny), regex_list[(str(source),str(destiny))])
+                regex_list.pop((str(source),str(destiny)))
+            else:
+                graph.edge("q{}".format(source),"q{}".format(destiny), labels[(source,destiny)])
+
+        for keys in regex_list.keys():
+            graph.edge("q{}".format(keys[0]),"q{}".format(keys[1]), regex_list[keys])
         # Rendering graph
         graph.render("DFA" + viz, view=True)
         return None
@@ -154,7 +165,7 @@ class tabAutomata:
             if i == 0:
                 new_start[i] = m
                 new_final[i] = m + 1
-            if self.transition_function[0,i] == "!":
+            if self.transition_function[0,i] == "":
                 new_start[i] = self.initial_state
 
         self.qrip_start = m
@@ -172,43 +183,101 @@ class tabAutomata:
 
         # Listing all in and out states
         while True:
-            in_states = []
-            out_states = []
-            m,n = np.shape(self.qrip_transition)
             qrip = self.qrip_transition[1,0]
+            
+            if int(qrip) == self.error_state:
+                break
 
+            in_states,out_states = {},{}
+            # in_states,out_states = [],[]
+            m,n = np.shape(self.qrip_transition)
+            
+            # Defining the next node to be ripped
             for i in range(m):
                 for j in range(n):
                     if i > 0 and j > 0:
-                        
-                        if self.qrip_transition[i,j] == str(qrip):
-                            in_states.append(self.qrip_transition[i,0])
-                    
-                        if i == qrip:
-                            out_states.append(self.qrip_transition[i,j])
-            
-            # print("Qrip:", qrip)
-            # print("Entrada:", in_states)
-            # print("Salida:", out_states)
+                        if self.qrip_transition[i,j] == qrip:
+                            # if self.re_gex == "" and self.qrip_transition[i,0] != str(self.qrip_start):
+                            # if self.re_gex == "":
+                            in_states[(self.qrip_transition[i,0], qrip)] = self.qrip_transition[0,j]
+                            # else:
+                            #     in_states[(self.qrip_transition[i,0], qrip)] = self.re_gex
 
+                            self.qrip_transition[i,j] = self.error_state
+
+                        elif self.qrip_transition[i,0] == qrip and self.qrip_transition[i,j] != str(self.error_state):
+                            out_states[(qrip, self.qrip_transition[i,j])] = self.qrip_transition[0,j]
+
+            j = 1
+
+            for k in out_states.keys():
+                if k[1] != str(self.error_state):
+                    self.qrip_transition[-2,j] = k[1]
+                    j += 1
+
+            # print("Qrip:", qrip)
+            # # print("Entrada:", in_statess['2'][0])
+
+            # Applying REGEX operators:
+            for keys in self.regex_list.keys():
+                in_states[keys] = self.regex_list[keys]
+
+            self.regex_list = self.qrip_oper(qrip, in_states, out_states)
+            # print("self.regex_list:", self.regex_list)
             # Modifying qrip_transition
             self.qrip_transition = np.delete(self.qrip_transition, (1), axis=0)
-            m -= 1
-
-            for i in range(m):
-                for j in range(n):
-                    if i > 0 and j > 0:
-                        if self.qrip_transition[i,j] == str(qrip):
-                            self.qrip_transition[i,j] = self.qrip_start
-
-
-            # print("Transition matrix:\n", self.qrip_transition)
+            # # print("Transition matrix:\n", self.qrip_transition)
             self.visualize_graph(self.qrip_transition, viz=str(qrip))
-            input()
-            if m < 4:
-                break
+            # input()
+
         return None
     
+
+    def qrip_oper(self, qrip, in_states, out_states):
+        in_regex, out_regex = {},[]
+        in_regex_str, out_regex_str = "",""
+        break_statement = False
+
+        if qrip == str(self.error_state):
+            in_regex = self.regex_list
+        else:
+            for key_in in in_states.keys():
+                for key_out in out_states.keys():
+                    #Kleen Closure:
+                    # print(key_in, key_out)
+                    if (key_in[0], key_out[1]) in in_states.keys():
+                        in_regex_u = in_states[key_in[0], key_out[1]]
+                        for key_val in in_states.keys():
+                            if key_val[0] == key_val[1]:
+                                in_regex_kleen = "({})*".format(in_states[key_val])
+                            if (key_in[0], key_out[1]) != key_val:
+                                out_regex.append(in_states[key_val])
+                        in_regex[(key_in[0], key_out[1])] = in_regex_u + "U" + out_regex[0] + in_regex_kleen + out_regex[1]
+                        break_statement = True
+                        break
+                    else:
+                        if key_in[0] == key_in[1]:
+                            in_regex_str = "({})*".format(in_states[key_in])
+                        else:
+                        #Concatenation:
+                            if in_regex_str != "":
+                                in_regex[(key_in[0], key_out[1])] = in_states[key_in] + in_regex_str + out_states[key_out]
+                            else:
+                                in_regex[(key_in[0], key_out[1])] = in_states[key_in] + out_states[key_out]
+                    print("Qrip State:", qrip)
+                    print("in_regex:", in_regex)
+                #Concatenation
+                if break_statement:
+                    break_statement = False
+                    break
+        
+        # print(in_regex)
+        # print(in_states)
+        # print(out_states)
+        # input("regex")
+        return in_regex
+    
+
     def loading_automata(self):
         self.transition_function = self.read_transition()
         # self.transition_function = np.array([
